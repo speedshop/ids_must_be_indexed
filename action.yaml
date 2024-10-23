@@ -1,5 +1,8 @@
+---
 name: 'Rails: All _id Columns Must Be Indexed'
-description: 'Ensures all foreign key columns in Rails apps have corresponding database indexes'
+description: >
+  Ensures all foreign key columns in Rails apps have corresponding database
+  indexes
 author: 'Nate Berkopec / The Speedshop'
 
 inputs:
