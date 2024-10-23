@@ -1,0 +1,72 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  bats-tests:
+    name: BATS Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install BATS
+        run: |
+          git clone https://github.com/bats-core/bats-core.git
+          cd bats-core
+          sudo ./install.sh /usr/local
+
+      - name: Run BATS tests
+        run: bats test/migration-index-test.bats
+
+    lint:
+      name: Lint
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: Check shell scripts
+          run: |
+            sudo apt-get install -y shellcheck
+            shellcheck check_indexes.sh
+
+        - name: Validate action.yml
+          run: |
+            yamllint action.yml
+
+        - name: Check file permissions
+          run: |
+            if [ ! -x "check_indexes.sh" ]; then
+              echo "check_indexes.sh must be executable"
+              exit 1
+            fi
+
+  release-test:
+    name: Test Release Assets
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [bats-tests, integration-tests, test-inputs, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify version numbers match
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          # Add version check logic here if you have version numbers in files
+
+      - name: Check required files exist
+        run: |
+          required_files=("action.yml" "check_indexes.sh" "README.md" "LICENSE")
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Missing required file: $file"
+              exit 1
+            fi
+          done

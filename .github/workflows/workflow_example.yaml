@@ -1,0 +1,19 @@
+name: Example Workflow
+on:
+  pull_request:
+    paths:
+      - 'db/migrate/**.rb'
+
+jobs:
+  check-indexes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Migration Indexes
+        uses: speedshop/rails-migration-index-checker@v1
+        # Optional: enable debug output
+        with:
+          debug: '0'
