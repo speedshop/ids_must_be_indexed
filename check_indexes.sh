@@ -79,7 +79,6 @@ get_changed_files() {
   fi
 }
 
-# Check if we should skip
 if should_skip; then
   exit 0
 fi
