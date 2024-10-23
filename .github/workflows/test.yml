@@ -1,14 +1,6 @@
 name: Tests
 
-on:
-  push:
-    branches: [ main ]
-    paths-ignore:
-      - '**.md'
-  pull_request:
-    branches: [ main ]
-    paths-ignore:
-      - '**.md'
+on: push
 
 jobs:
   bats-tests:
