@@ -13,7 +13,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Migration Indexes
-        uses: speedshop/rails-migration-index-checker@v1
+        uses: speedshop/rails-migration-index-checker@v1.1.0
         # Optional: enable debug output
         with:
           debug: '0'
