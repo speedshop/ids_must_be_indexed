@@ -4,6 +4,7 @@ setup() {
   # Create temporary directory for each test
   export TEMP_DIR="$(mktemp -d)"
   export GITHUB_WORKSPACE="$TEMP_DIR"
+  export DEBUG=1
   cd "$TEMP_DIR"
 
   # Set up git repo
@@ -284,4 +285,53 @@ end'
   echo "output: $output"
   [ "$status" -eq 0 ]
   [[ "$output" =~ "Skipping index check" ]]
+}
+
+@test "handles UUID foreign keys" {
+  create_schema '
+  create_table "products", force: :cascade do |t|
+    t.uuid "category_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_create_products.rb" '
+class CreateProducts < ActiveRecord::Migration[7.2]
+  def change
+    create_table :products do |t|
+      t.uuid :category_id
+      t.timestamps
+    end
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Missing index for foreign key column 'category_id' in table 'products'" ]]
+  [[ "$output" =~ "Column type: uuid (Universally Unique Identifier)" ]]
+}
+
+@test "passes when UUID has index" {
+  create_schema '
+  create_table "products", force: :cascade do |t|
+    t.uuid "category_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  add_index "products", ["category_id"], name: "index_products_on_category_id"'
+
+  create_migration "20240101000000_create_products.rb" '
+class CreateProducts < ActiveRecord::Migration[7.2]
+  def change
+    create_table :products do |t|
+      t.uuid :category_id
+      t.timestamps
+    end
+    add_index :products, :category_id
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 0 ]
 }

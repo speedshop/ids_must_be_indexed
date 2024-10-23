@@ -60,6 +60,9 @@ get_column_type_description() {
     "references")
       echo "Rails reference/belongs_to association"
       ;;
+    "uuid")
+      echo "Universally Unique Identifier"
+      ;;
     *)
       echo "$type"
       ;;
@@ -120,10 +123,30 @@ while IFS= read -r line; do
   fi
 
   # End of create_table block
-  if [ "$in_create_table" = true ] && echo "$line" | grep -q "^[[:space:]]*end"; then
-    current_schema_table=""
-    in_create_table=false
-    continue
+  if [ "$in_create_table" = true ]; then
+    # Match any of these patterns:
+    # t.bigint "column_id"
+    # t.integer "column_id"
+    # t.references "column"
+    # t.uuid "column_id"
+    if echo "$line" | grep -q "t\.\(bigint\|integer\|uuid\).*\".*_id\"" || \
+        echo "$line" | grep -q "t\.references.*\".*\"" || \
+        echo "$line" | grep -q "t\.belongs_to.*\".*\""; then
+
+      # Extract column name and type
+      if echo "$line" | grep -q "t\.\(bigint\|integer\|uuid\)"; then
+        column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1/p')
+        type=$(echo "$line" | sed -n 's/.*t\.\([^[:space:]]*\).*$/\1/p')
+      else
+        # For references/belongs_to, append _id
+        column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1_id/p')
+        type="references"
+      fi
+
+      debug "Found potential foreign key in schema - table: $current_schema_table, column: $column, type: $type"
+      SCHEMA_COLUMNS["$current_schema_table:$column"]=1
+      COLUMN_TYPES["$current_schema_table:$column"]="$type"
+    fi
   fi
 
   # Process columns inside create_table

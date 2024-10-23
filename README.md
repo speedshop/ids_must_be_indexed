@@ -4,7 +4,7 @@
 
 # "_ID Must Be Indexed": A Rails Foreign Key Index Check
 
-A GitHub Action to ensure all Rails application foreign key columns (any column ending in `_id` and an `integer` or `bigint`) have corresponding database indexes.
+A GitHub Action to ensure all Rails application foreign key columns (any column ending in `_id` and an `integer`, `bigint` or `uuid`) have corresponding database indexes.
 
 ```
 Error: Missing index for foreign key column 'comment_id' in table 'albums'
@@ -27,7 +27,7 @@ Missing indexes on foreign keys is a massive tax on the performance of your appl
 
 - **Fails your pull request** if you are missing indexes on foreign key columns
 - Catches foreign keys created or **modified across multiple migrations**
-- Supports various column types (**bigint, integer,** references)
+- Supports various column types (**bigint, integer,**, uuid or references)
 - Incredibly **fast**, **no dependencies** other than on checking out your code.
 
 ## Requirements
