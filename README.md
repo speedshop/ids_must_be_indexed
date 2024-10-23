@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://imgur.com/G6Tgzou.png" />
+</p>
+
 # "_ID Must Be Indexed": A Rails Foreign Key Index Check
 
 A GitHub Action to ensure all Rails application foreign key columns (any column ending in `_id` and an `integer` or `bigint`) have corresponding database indexes.
