@@ -8,8 +8,8 @@ setup() {
 
   # Set up git repo
   git init
-  git config --global user.email "test@example.com"
-  git config --global user.name "Test User"
+  git config --local user.email "test@example.com"
+  git config --local user.name "Test User"
   git checkout -b main
 
   # Create base branch
