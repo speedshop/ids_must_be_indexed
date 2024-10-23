@@ -50,7 +50,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Migration Indexes
-        uses: speedshop/rails-migration-index-checker@v1
+        uses: speedshop/ids_must_be_indexed@v1
 ```
 
 ## Configuration
@@ -121,11 +121,11 @@ class ChangeCommentIdType < ActiveRecord::Migration[7.0]
 end
 ```
 
-## Skipping Checks
+## Skipping
 
-There are times when you might need to skip the index check, such as:
+There are times when you might want to skip the index check, such as:
 - Temporary migrations
-- Special cases where indexes aren't needed
+- Special cases where indexes would be inappropriate, like when disk space is limited
 - Development or testing scenarios
 
 You can skip the check in three ways:
