@@ -162,7 +162,7 @@ while IFS= read -r line; do
     else
       columns=$(echo "$line" | sed -n 's/.*"[^"]*",[[:space:]]*"\([^"]*\)".*$/\1/p')
     fi
-    if [ ! -z "$table" ] && [ ! -z "$columns" ]; then
+    if [ -n "$table" ] && [ -n "$columns" ]; then
       EXISTING_INDEXES["$table:$columns"]=1
       debug "Recorded existing index - table: $table, columns: $columns"
     fi
