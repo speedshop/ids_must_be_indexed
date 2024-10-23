@@ -6,6 +6,8 @@ jobs:
   bats-tests:
     name: BATS Tests
     runs-on: ubuntu-latest
+    env:
+      DEBUG: "1"
     steps:
       - uses: actions/checkout@v4
 

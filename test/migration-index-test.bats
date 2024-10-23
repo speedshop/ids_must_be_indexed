@@ -7,10 +7,9 @@ setup() {
   cd "$TEMP_DIR"
 
   # Set up git repo
-  git config --local init.defaultBranch main
+  git init
   git config --local user.email "test@example.com"
   git config --local user.name "Test User"
-  git init
   git checkout -b main
 
   # Create base branch
