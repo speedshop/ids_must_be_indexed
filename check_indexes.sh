@@ -1,9 +1,32 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
+DEBUG=${DEBUG:-0}
+
 debug() {
   if [ "${DEBUG}" = "1" ]; then
-    echo "$@"
+    echo "DEBUG: $*" >&2
   fi
+}
+
+is_foreign_key_column() {
+  local column="$1"
+  [[ "$column" == *_id ]]
+}
+
+extract_table_name() {
+  sed -n 's/create_table[[:space:]]*:\([a-zA-Z0-9_]*\).*$/\1/p'
+}
+
+extract_column_info() {
+  local line="$1"
+  local type=$(echo "$line" | awk '{print $1}' | cut -d. -f2)
+  local column=$(echo "$line" | awk '{print $2}' | tr -d '":,')
+  if [ "$type" = "references" ] || [ "$type" = "belongs_to" ]; then
+    column="${column}_id"
+  fi
+  echo "$column $type"
 }
 
 # Function to check if check should be skipped
@@ -80,7 +103,6 @@ get_changed_files() {
   fi
 }
 
-# New function to parse migration files
 parse_migration() {
   local file="$1"
   debug "Parsing migration file: $file"
@@ -89,44 +111,31 @@ parse_migration() {
   local in_create_table=false
 
   while IFS= read -r line; do
-    # Trim leading/trailing whitespace
     line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
-    # Check for create_table
     if echo "$line" | grep -q "create_table"; then
-      current_table=$(echo "$line" | sed -n 's/create_table[[:space:]]*:\([a-zA-Z0-9_]*\).*$/\1/p')
+      current_table=$(echo "$line" | extract_table_name)
       in_create_table=true
       debug "Found create_table for $current_table"
-    # Check for column definitions within create_table
     elif [ "$in_create_table" = true ] && echo "$line" | grep -qE "^t\.(bigint|integer|references|belongs_to|uuid)"; then
-      local column type
-      type=$(echo "$line" | awk '{print $1}' | cut -d. -f2)
-      column=$(echo "$line" | awk '{print $2}' | tr -d '":,')
-      if [ "$type" = "references" ] || [ "$type" = "belongs_to" ]; then
-        column="${column}_id"
-      fi
-      if [[ "$column" == *_id ]]; then
+      read -r column type <<< "$(extract_column_info "$line")"
+      if is_foreign_key_column "$column"; then
         debug "Found column in create_table - table: $current_table, column: $column, type: $type"
         MIGRATION_COLUMNS["$current_table:$column"]="$type"
       fi
-    # Check for end of create_table block
     elif [ "$in_create_table" = true ] && echo "$line" | grep -q "end"; then
       in_create_table=false
       current_table=""
-    # Check for add_column or change_column
     elif echo "$line" | grep -qE "add_column|change_column"; then
       local table column type
-      table=$(echo "$line" | awk '{print $2}' | tr -d ':,')
-      column=$(echo "$line" | awk '{print $3}' | tr -d ':,')
-      type=$(echo "$line" | awk '{print $4}' | tr -d ':,')
-      if [[ "$column" == *_id ]]; then
+      read -r _ table column type <<< "$(echo "$line" | awk '{print $1, $2, $3, $4}' | tr -d ':,"')"
+      if is_foreign_key_column "$column"; then
         debug "Found column change - table: $table, column: $column, type: $type"
         MIGRATION_COLUMNS["$table:$column"]="$type"
       fi
     fi
   done < "$file"
 }
-
 if should_skip; then
   exit 0
 fi
