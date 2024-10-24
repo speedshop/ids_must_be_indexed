@@ -21,8 +21,12 @@ extract_table_name() {
 
 extract_column_info() {
   local line="$1"
-  local type=$(echo "$line" | awk '{print $1}' | cut -d. -f2)
-  local column=$(echo "$line" | awk '{print $2}' | tr -d '":,')
+  local type
+  local column
+
+  type=$(echo "$line" | awk '{print $1}' | cut -d. -f2)
+  column=$(echo "$line" | awk '{print $2}' | tr -d '":,')
+
   if [ "$type" = "references" ] || [ "$type" = "belongs_to" ]; then
     column="${column}_id"
   fi
