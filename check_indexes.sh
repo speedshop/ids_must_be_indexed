@@ -169,61 +169,68 @@ fi
 
 debug "Reading schema.rb..."
 
-# Variables to track current table being processed in schema
-current_schema_table=""
-in_create_table=false
+parse_schema() {
+  local current_table=""
+  local in_create_table=false
 
-while IFS= read -r line; do
-  # Start of create_table block
-  if echo "$line" | grep -q "create_table"; then
-    current_schema_table=$(echo "$line" | sed -n 's/[[:space:]]*create_table[[:space:]]*"\([^"]*\)".*$/\1/p')
-    in_create_table=true
-    debug "Processing schema table: $current_schema_table"
-    continue
+  while IFS= read -r line; do
+    case "$line" in
+      *create_table*)
+        current_table=$(echo "$line" | sed -n 's/[[:space:]]*create_table[[:space:]]*"\([^"]*\)".*$/\1/p')
+        in_create_table=true
+        debug "Processing schema table: $current_table"
+        ;;
+      *t.bigint*\"*_id\"*|*t.integer*\"*_id\"*|*t.uuid*\"*_id\"*|*t.references*|*t.belongs_to*)
+        if [ "$in_create_table" = true ]; then
+          parse_column "$line" "$current_table"
+        fi
+        ;;
+      *add_index*)
+        parse_index "$line"
+        ;;
+      *end*)
+        in_create_table=false
+        ;;
+    esac
+  done < "$SCHEMA_FILE"
+}
+
+parse_column() {
+  local line="$1"
+  local table="$2"
+  local column type
+
+  if [[ "$line" =~ t\.(bigint|integer|uuid) ]]; then
+    column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1/p')
+    type=${BASH_REMATCH[1]}
+  else
+    column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1_id/p')
+    type="references"
   fi
 
-  # End of create_table block
-  if [ "$in_create_table" = true ]; then
-    # Match any of these patterns:
-    # t.bigint "column_id"
-    # t.integer "column_id"
-    # t.references "column"
-    # t.uuid "column"
-    if echo "$line" | grep -q "t\.\(bigint\|integer\|uuid\) .*\".*_id\"" || \
-        echo "$line" | grep -q "t\.references.*\".*\"" || \
-        echo "$line" | grep -q "t\.belongs_to.*\".*\""; then
+  debug "Found potential foreign key in schema - table: $table, column: $column, type: $type"
+  SCHEMA_COLUMNS["$table:$column"]=1
+  COLUMN_TYPES["$table:$column"]="$type"
+}
 
-      # Extract column name and type
-      if echo "$line" | grep -q "t\.\(bigint\|integer\|uuid\)"; then
-        column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1/p')
-        type=$(echo "$line" | sed -n 's/.*t\.\([^[:space:]]*\).*$/\1/p')
-      else
-        # For references/belongs_to, append _id
-        column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1_id/p')
-        type="references"
-      fi
+parse_index() {
+  local line="$1"
+  local table columns
 
-      debug "Found potential foreign key in schema - table: $current_schema_table, column: $column, type: $type"
-      SCHEMA_COLUMNS["$current_schema_table:$column"]=1
-      COLUMN_TYPES["$current_schema_table:$column"]="$type"
-    fi
+  table=$(echo "$line" | sed -n 's/.*add_index[[:space:]]*"\([^"]*\)".*$/\1/p')
+  if [[ "$line" =~ \[|\, ]]; then
+    columns=$(echo "$line" | sed -n 's/.*\[\([^]]*\)\].*$/\1/p')
+  else
+    columns=$(echo "$line" | sed -n 's/.*"[^"]*",[[:space:]]*"\([^"]*\)".*$/\1/p')
   fi
 
-  # Process indexes
-  if echo "$line" | grep -q "add_index"; then
-    debug "Found index in schema: $line"
-    table=$(echo "$line" | sed -n 's/.*add_index[[:space:]]*"\([^"]*\)".*$/\1/p')
-    if echo "$line" | grep -q "\[\|,"; then
-      columns=$(echo "$line" | sed -n 's/.*\[\([^]]*\)\].*$/\1/p')
-    else
-      columns=$(echo "$line" | sed -n 's/.*"[^"]*",[[:space:]]*"\([^"]*\)".*$/\1/p')
-    fi
-    if [ -n "$table" ] && [ -n "$columns" ]; then
-      EXISTING_INDEXES["$table:$columns"]=1
-      debug "Recorded existing index - table: $table, columns: $columns"
-    fi
+  if [ -n "$table" ] && [ -n "$columns" ]; then
+    EXISTING_INDEXES["$table:$columns"]=1
+    debug "Recorded existing index - table: $table, columns: $columns"
   fi
-done < "$SCHEMA_FILE"
+}
+
+parse_schema
 
 debug "Schema columns that need indexes:"
 for key in "${!SCHEMA_COLUMNS[@]}"; do
@@ -233,8 +240,7 @@ done
 # Check only the columns changed in migrations
 missing_indexes=false
 for key in "${!MIGRATION_COLUMNS[@]}"; do
-  table=$(echo "${key%:*}" | tr -d ':')
-  column=$(echo "${key#*:}" | tr -d ':')
+  IFS=':' read -r table column <<< "$key"
   column_type=${MIGRATION_COLUMNS[$key]}
   type_description=$(get_column_type_description "$column_type")
 
