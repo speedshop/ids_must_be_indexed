@@ -4,7 +4,6 @@ setup() {
   # Create temporary directory for each test
   export TEMP_DIR="$(mktemp -d)"
   export GITHUB_WORKSPACE="$TEMP_DIR"
-  export DEBUG=1
   cd "$TEMP_DIR"
 
   # Set up git repo
@@ -204,8 +203,6 @@ end'
 }
 
 @test "debug output works when enabled" {
-  export DEBUG=1
-
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -334,4 +331,87 @@ end'
 
   run ./check_indexes.sh
   [ "$status" -eq 0 ]
+}
+
+@test "passes when new column with index is added" {
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.bigint "company_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  add_index "users", ["company_id"], name: "index_users_on_company_id" '
+
+  create_migration "20240101000000_add_company_id_to_users.rb" '
+class AddCompanyIdToUsers < ActiveRecord::Migration[7.2]
+  def change
+    add_column :users, :company_id, :bigint
+    add_index :users, :company_id
+  end
+end'
+
+    run env DEBUG=1 ./check_indexes.sh
+  echo "output: $output"
+  [ "$status" -eq 0 ]
+}
+
+@test "fails when new column without index is added" {
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.bigint "company_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_add_company_id_to_users.rb" '
+class AddCompanyIdToUsers < ActiveRecord::Migration[7.2]
+  def change
+    add_column :users, :company_id, :bigint
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Missing index for foreign key column 'company_id' in table 'users'" ]]
+}
+
+@test "passes when existing column without index is not changed" {
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.bigint "company_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_add_name_to_users.rb" '
+class AddNameToUsers < ActiveRecord::Migration[7.2]
+  def change
+    add_column :users, :name, :string
+  end
+end'
+
+    run env DEBUG=1 ./check_indexes.sh
+  echo "Test output:"
+  echo "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "fails when column type is changed to foreign key without index" {
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.string "company_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_change_company_id_to_bigint.rb" '
+class ChangeCompanyIdToBigint < ActiveRecord::Migration[7.2]
+  def change
+    change_column :users, :company_id, :bigint
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 1 ]
 }
