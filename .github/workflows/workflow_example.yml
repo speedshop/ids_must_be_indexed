@@ -1,4 +1,4 @@
-name: Example Workflow
+name: Check Foreign Key Indexes
 on:
   pull_request:
     paths:
@@ -13,7 +13,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Migration Indexes
-        uses: speedshop/rails-migration-index-checker@v1.1.0
+        uses: speedshop/ids_must_be_indexed@v1.1.0
         # Optional: enable debug output
         with:
           debug: '0'
