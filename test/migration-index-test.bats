@@ -415,3 +415,59 @@ end'
   run ./check_indexes.sh
   [ "$status" -eq 1 ]
 }
+
+@test "fails when polymorphic association has no index" {
+  create_schema '
+  create_table "comments", force: :cascade do |t|
+    t.string "commentable_type"
+    t.uuid "commentable_id"
+    t.text "content"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_create_comments.rb" '
+class CreateComments < ActiveRecord::Migration[7.2]
+  def change
+    create_table :comments do |t|
+      t.references :commentable, polymorphic: true, type: :uuid
+      t.text :content
+      t.timestamps
+    end
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Missing index for polymorphic association 'commentable' in table 'comments'" ]]
+  [[ "$output" =~ "add_index :comments, [:commentable_type, :commentable_id]" ]]
+}
+
+@test "passes when polymorphic association has correct composite index" {
+  create_schema '
+  create_table "comments", force: :cascade do |t|
+    t.string "commentable_type"
+    t.uuid "commentable_id"
+    t.text "content"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  add_index "comments", ["commentable_type", "commentable_id"], name: "index_comments_on_commentable"'
+
+  create_migration "20240101000000_create_comments.rb" '
+class CreateComments < ActiveRecord::Migration[7.2]
+  def change
+    create_table :comments do |t|
+      t.references :commentable, polymorphic: true, type: :uuid
+      t.text :content
+      t.timestamps
+    end
+    add_index :comments, [:commentable_type, :commentable_id]
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 0 ]
+  [[ ! "$output" =~ "Missing index for polymorphic association 'commentable' in table 'comments'" ]]
+}

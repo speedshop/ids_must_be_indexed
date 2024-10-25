@@ -170,6 +170,7 @@ check_all_schema_columns() {
 parse_schema() {
   local current_table=""
   local in_create_table=false
+  declare -A current_table_columns
 
   while IFS= read -r line; do
     case "$line" in
@@ -177,6 +178,8 @@ parse_schema() {
         current_table=$(echo "$line" | sed -n 's/[[:space:]]*create_table[[:space:]]*"\([^"]*\)".*$/\1/p')
         in_create_table=true
         debug "Processing schema table: $current_table"
+        unset current_table_columns
+        declare -A current_table_columns
         ;;
       *t.index*)
         if [ "$in_create_table" = true ]; then
@@ -188,10 +191,13 @@ parse_schema() {
         ;;
       *t.*)
         if [ "$in_create_table" = true ]; then
-          parse_column "$line" "$current_table"
+          parse_column "$line" "$current_table" current_table_columns
         fi
         ;;
       *end*)
+        if [ "$in_create_table" = true ]; then
+          check_polymorphic_associations "$current_table" current_table_columns
+        fi
         in_create_table=false
         ;;
     esac
@@ -201,24 +207,43 @@ parse_schema() {
 parse_column() {
   local line="$1"
   local table="$2"
+  local -n table_columns="$3"
   local column type
 
-  if [[ "$line" =~ t\.(bigint|integer|uuid|references|belongs_to) ]]; then
+  if [[ "$line" =~ t\.(bigint|integer|uuid|references|belongs_to|string) ]]; then
     type=${BASH_REMATCH[1]}
     column=$(echo "$line" | sed -n 's/.*t\.[^[:space:]]*[[:space:]]*"\([^"]*\)".*$/\1/p')
+    table_columns["$column"]="$type"
 
     if [ "$type" = "references" ] || [ "$type" = "belongs_to" ]; then
       column="${column}_id"
+      type=$(echo "$line" | awk '{print $1}' | cut -d. -f2)
+    elif [[ "$column" != *_id ]]; then
+      return
     fi
 
-    if [[ "$column" == *_id ]]; then
-      debug "Found potential foreign key in schema - table: $table, column: $column, type: $type"
-      SCHEMA_COLUMNS["$table:$column"]="$type"
-      COLUMN_TYPES["$table:$column"]="$type"
-    else
-      debug "Skipping non-foreign key column - table: $table, column: $column, type: $type"
-    fi
+    debug "Found potential foreign key in schema - table: $table, column: $column, type: $type"
+    SCHEMA_COLUMNS["$table:$column"]="$type"
+    COLUMN_TYPES["$table:$column"]="$type"
   fi
+}
+
+check_polymorphic_associations() {
+  local table="$1"
+  local -n table_columns="$2"
+
+  for column in "${!table_columns[@]}"; do
+    if [[ "$column" == *_id ]]; then
+      local base_name="${column%_id}"
+      local type_column="${base_name}_type"
+
+      if [[ -v "table_columns[$type_column]" ]]; then
+        debug "Found polymorphic association - table: $table, columns: $column, $type_column"
+        COLUMN_TYPES["$table:$column"]="polymorphic"
+        COLUMN_TYPES["$table:$type_column"]="polymorphic"
+      fi
+    fi
+  done
 }
 
 parse_index() {
@@ -260,6 +285,17 @@ index_exists() {
     debug "Found existing index for $table:$column"
     return 0
   fi
+
+  # Check for polymorphic index
+  if [[ "${COLUMN_TYPES[$table:$column]}" == "polymorphic" ]]; then
+    local base_column="${column%_id}"
+    if [[ -v "TABLE_INDEXES[$table:${base_column}_type,${base_column}_id]" ]] ||
+       [[ -v "TABLE_INDEXES[$table:${base_column}_id,${base_column}_type]" ]]; then
+      debug "Found existing polymorphic index for $table:$column"
+      return 0
+    fi
+  fi
+
   debug "No existing index found for $table:$column"
   return 1
 }
@@ -302,12 +338,22 @@ main_check_indexes() {
 
     debug "Checking index requirement from migration - table: $table, column: $column, type: $column_type"
     if ! index_exists "$table" "$column"; then
-      echo "::error file=$file::Missing index for foreign key column '$column' in table '$table'"
-      echo "Details:"
-      echo "- Column type: $column_type ($type_description)"
-      echo "- Column appears to be a foreign key (ends with _id)"
-      echo "- Please add an index to improve query performance"
-      echo "- You can add it using: add_index :$table, :$column"
+      if [[ "${COLUMN_TYPES[$table:$column]}" == "polymorphic" ]]; then
+        local base_column="${column%_id}"
+        echo "::error file=$file::Missing index for polymorphic association '${base_column}' in table '$table'"
+        echo "Details:"
+        echo "- Association type: Polymorphic"
+        echo "- Columns: ${base_column}_type, ${base_column}_id"
+        echo "- Please add a composite index to improve query performance"
+        echo "- You can add it using: add_index :$table, [:${base_column}_type, :${base_column}_id]"
+      else
+        echo "::error file=$file::Missing index for foreign key column '$column' in table '$table'"
+        echo "Details:"
+        echo "- Column type: $column_type ($type_description)"
+        echo "- Column appears to be a foreign key (ends with _id)"
+        echo "- Please add an index to improve query performance"
+        echo "- You can add it using: add_index :$table, :$column"
+      fi
       missing_indexes=true
     fi
   done
