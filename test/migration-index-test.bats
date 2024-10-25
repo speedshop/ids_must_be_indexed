@@ -497,3 +497,27 @@ end'
   [ "$status" -eq 0 ]
   [[ ! "$output" =~ "Missing index for foreign key column 'parking_id' in table 'waiting_lists'" ]]
 }
+
+@test "recommends correct index for column with comment" {
+  create_schema '
+  create_table "invitations", force: :cascade do |t|
+    t.bigint "invited_by_user_id", comment: "member ID"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_create_invitations.rb" '
+class CreateInvitations < ActiveRecord::Migration[7.2]
+  def change
+    create_table :invitations do |t|
+      t.bigint :invited_by_user_id, comment: "member ID"
+      t.timestamps
+    end
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Missing index for foreign key column 'invited_by_user_id' in table 'invitations'" ]]
+  [[ "$output" =~ "add_index :invitations, :invited_by_user_id" ]]
+}
