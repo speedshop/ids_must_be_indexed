@@ -286,15 +286,14 @@ index_exists() {
     return 0
   fi
 
-  # Check for polymorphic index
-  if [[ "${COLUMN_TYPES[$table:$column]}" == "polymorphic" ]]; then
-    local base_column="${column%_id}"
-    if [[ -v "TABLE_INDEXES[$table:${base_column}_type,${base_column}_id]" ]] ||
-       [[ -v "TABLE_INDEXES[$table:${base_column}_id,${base_column}_type]" ]]; then
-      debug "Found existing polymorphic index for $table:$column"
+  # Check for composite indexes
+  for index in "${!TABLE_INDEXES[@]}"; do
+    IFS=':' read -r index_table index_columns <<< "$index"
+    if [[ "$index_table" == "$table" && "$index_columns" == *"$column"* ]]; then
+      debug "Found existing composite index for $table:$column"
       return 0
     fi
-  fi
+  done
 
   debug "No existing index found for $table:$column"
   return 1

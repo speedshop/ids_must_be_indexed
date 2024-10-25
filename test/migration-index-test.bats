@@ -471,3 +471,29 @@ end'
   [ "$status" -eq 0 ]
   [[ ! "$output" =~ "Missing index for polymorphic association 'commentable' in table 'comments'" ]]
 }
+
+@test "passes when column is part of a composite index" {
+  create_schema '
+  create_table "waiting_lists", force: :cascade do |t|
+    t.integer "parking_id"
+    t.datetime "deleted_at", precision: nil
+  end
+
+  add_index "waiting_lists", ["parking_id", "deleted_at"], name: "index_waiting_lists_on_parking_id", where: "(deleted_at IS NULL)"'
+
+  create_migration "20240101000000_create_waiting_lists.rb" '
+class CreateWaitingLists < ActiveRecord::Migration[7.2]
+  def change
+    create_table :waiting_lists do |t|
+      t.integer :parking_id
+      t.datetime :deleted_at
+    end
+    add_index :waiting_lists, [:parking_id, :deleted_at], name: "index_waiting_lists_on_parking_id", where: "deleted_at IS NULL"
+  end
+end'
+
+  run ./check_indexes.sh
+  echo "output: $output"
+  [ "$status" -eq 0 ]
+  [[ ! "$output" =~ "Missing index for foreign key column 'parking_id' in table 'waiting_lists'" ]]
+}
