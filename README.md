@@ -26,10 +26,9 @@ Missing indexes on foreign keys is a massive tax on the performance of your appl
 ## Features
 
 - **Fails your pull request** if you are missing indexes on foreign key columns
-- **Only runs on columns changed in the PR** (not all existing columns in your database), so you can add it to any project with no configuration
+- **Install in 10 seconds**, without any dependencies or configuration. Since it only runs on columns changed in each PR, you can add this to any project without spending a half hour adding ignored columns.
 - Catches foreign keys created or **modified across multiple migrations**
 - Supports various column types (**bigint, integer,** uuid or references), polymorphic associations and composite indexes
-- Incredibly **fast**, **no dependencies** other than on checking out your code
 
 ## Requirements
 
