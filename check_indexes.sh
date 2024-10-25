@@ -220,6 +220,9 @@ parse_column() {
     if [ "$type" = "references" ] || [ "$type" = "belongs_to" ]; then
       column="${column}_id"
       type=$(echo "$line" | awk '{print $1}' | cut -d. -f2)
+    elif [ "$type" = "string" ] && [[ "$column" == *_id ]]; then
+      # Skip string columns ending with _id
+      return
     elif [[ "$column" != *_id ]]; then
       return
     fi
