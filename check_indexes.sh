@@ -126,6 +126,7 @@ parse_migration() {
 }
 # New function to initialize global variables
 initialize_globals() {
+  # shellcheck disable=SC2034
   if ! declare -g TEST_VAR 2>/dev/null; then
     echo "Error: This script requires Bash version 4.2 or later for declare -g support."
     echo "Your current Bash version is: ${BASH_VERSION}"
@@ -135,7 +136,6 @@ initialize_globals() {
 
 
   declare -g -A MIGRATION_COLUMNS
-  declare -g -A EXISTING_INDEXES
   declare -g -A SCHEMA_COLUMNS
   declare -g -A COLUMN_TYPES
   declare -g -A TABLE_INDEXES
@@ -170,6 +170,7 @@ check_all_schema_columns() {
 parse_schema() {
   local current_table=""
   local in_create_table=false
+  #
   declare -A current_table_columns
 
   while IFS= read -r line; do
@@ -179,6 +180,7 @@ parse_schema() {
         in_create_table=true
         debug "Processing schema table: $current_table"
         unset current_table_columns
+        # shellcheck disable=SC2034
         declare -A current_table_columns
         ;;
       *t.index*)
@@ -229,7 +231,9 @@ parse_column() {
 }
 
 check_polymorphic_associations() {
+  # shellcheck disable=SC2178
   local table="$1"
+  # shellcheck disable=SC2178
   local -n table_columns="$2"
 
   for column in "${!table_columns[@]}"; do
@@ -265,7 +269,6 @@ parse_index() {
   columns=$(echo "$columns" | tr -d ' ' | tr ',' ' ')
 
   if [ -n "$table" ] && [ -n "$columns" ]; then
-    EXISTING_INDEXES["$table:$columns"]=1
     # Store each column separately for faster lookup
     for column in $columns; do
       TABLE_INDEXES["$table:$column"]=1

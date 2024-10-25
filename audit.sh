@@ -4,6 +4,7 @@
 set -euo pipefail
 
 # Source the check_indexes.sh file
+# shellcheck disable=SC1091
 source ./check_indexes.sh
 
 # Colors for output
@@ -38,8 +39,7 @@ declare -A missing_index_reports
 declare -A missing_index_commands
 
 # Sort the keys of SCHEMA_COLUMNS
-IFS=$'\n' sorted_keys=($(sort <<<"${!SCHEMA_COLUMNS[*]}"))
-unset IFS
+mapfile -t sorted_keys < <(printf '%s\n' "${!SCHEMA_COLUMNS[@]}" | sort)
 
 echo "Schema Analysis Report"
 echo "====================="
