@@ -13,7 +13,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Migration Indexes
-        uses: speedshop/ids_must_be_indexed@v1.2.0
+        uses: speedshop/ids_must_be_indexed@v1.2.1
         # Optional: enable debug output
         with:
           debug: '0'

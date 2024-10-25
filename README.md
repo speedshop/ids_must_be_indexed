@@ -55,7 +55,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Migration Indexes
-        uses: speedshop/ids_must_be_indexed@v1.2.0
+        uses: speedshop/ids_must_be_indexed@v1.2.1
 ```
 
 ## Auditing Existing Schema
@@ -149,7 +149,7 @@ git commit -m "Add user migration [skip-index-check]"
 2. Set environment variable in your workflow:
 ```yaml
 - name: Check Migration Indexes
-  uses: your-username/ids_must_be_indexed@v1.2.0
+  uses: your-username/ids_must_be_indexed@v1.2.1
   env:
     SKIP_INDEX_CHECK: "1"
 ```
