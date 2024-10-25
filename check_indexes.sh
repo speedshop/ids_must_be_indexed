@@ -58,22 +58,6 @@ should_skip() {
   return 1
 }
 
-# Function to check if an index exists in schema.rb
-index_exists() {
-  local table="$1"
-  local column="$2"
-
-  debug "Checking if index exists for $table:$column"
-  for key in "${!EXISTING_INDEXES[@]}"; do
-    if echo "$key" | grep -q "$table:.*$column"; then
-      debug "Found existing index in schema: $key"
-      return 0
-    fi
-  done
-  debug "No existing index found in schema"
-  return 1
-}
-
 # Function to get column type description
 get_column_type_description() {
   local type="$1"
@@ -140,38 +124,48 @@ parse_migration() {
     fi
   done < "$file"
 }
-if should_skip; then
-  exit 0
-fi
+# New function to initialize global variables
+initialize_globals() {
+  if ! declare -g TEST_VAR 2>/dev/null; then
+    echo "Error: This script requires Bash version 4.2 or later for declare -g support."
+    echo "Your current Bash version is: ${BASH_VERSION}"
+    echo "Please upgrade your Bash version to run this script."
+    exit 1
+  fi
 
-# Get list of changed migration files
-CHANGED_FILES=$(get_changed_files)
 
-debug "Changed files: $CHANGED_FILES"
+  declare -g -A MIGRATION_COLUMNS
+  declare -g -A EXISTING_INDEXES
+  declare -g -A SCHEMA_COLUMNS
+  declare -g -A COLUMN_TYPES
+  declare -g -A TABLE_INDEXES
+}
 
-if [ -z "$CHANGED_FILES" ]; then
-  debug "No migration files changed"
-  exit 0
-fi
+# New function to check changed migration files
+check_changed_migrations() {
+  # Get list of changed migration files
+  CHANGED_FILES=$(get_changed_files)
 
-# Parse changed migration files
-declare -A MIGRATION_COLUMNS
-for file in $CHANGED_FILES; do
-  parse_migration "$file"
-done
+  debug "Changed files: $CHANGED_FILES"
 
-# Read current schema.rb to build table structure
-SCHEMA_FILE="db/schema.rb"
-declare -A EXISTING_INDEXES
-declare -A SCHEMA_COLUMNS
-declare -A COLUMN_TYPES
+  if [ -z "$CHANGED_FILES" ]; then
+    debug "No migration files changed"
+    return 1
+  fi
 
-if [ ! -f "$SCHEMA_FILE" ]; then
-  echo "Error: schema.rb not found at $SCHEMA_FILE"
-  exit 1
-fi
+  # Parse changed migration files
+  for file in $CHANGED_FILES; do
+    parse_migration "$file"
+  done
 
-debug "Reading schema.rb..."
+  return 0
+}
+
+# New function to check all columns in schema
+check_all_schema_columns() {
+  local schema_file="$1"
+  parse_schema "$schema_file"
+}
 
 parse_schema() {
   local current_table=""
@@ -184,13 +178,18 @@ parse_schema() {
         in_create_table=true
         debug "Processing schema table: $current_table"
         ;;
-      *t.bigint*\"*_id\"*|*t.integer*\"*_id\"*|*t.uuid*\"*_id\"*|*t.references*|*t.belongs_to*)
+      *t.index*)
         if [ "$in_create_table" = true ]; then
-          parse_column "$line" "$current_table"
+          parse_index "$line"
         fi
         ;;
       *add_index*)
         parse_index "$line"
+        ;;
+      *t.*)
+        if [ "$in_create_table" = true ]; then
+          parse_column "$line" "$current_table"
+        fi
         ;;
       *end*)
         in_create_table=false
@@ -204,65 +203,124 @@ parse_column() {
   local table="$2"
   local column type
 
-  if [[ "$line" =~ t\.(bigint|integer|uuid) ]]; then
-    column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1/p')
+  if [[ "$line" =~ t\.(bigint|integer|uuid|references|belongs_to) ]]; then
     type=${BASH_REMATCH[1]}
-  else
-    column=$(echo "$line" | sed -n 's/.*"\([^"]*\)".*$/\1_id/p')
-    type="references"
-  fi
+    column=$(echo "$line" | sed -n 's/.*t\.[^[:space:]]*[[:space:]]*"\([^"]*\)".*$/\1/p')
 
-  debug "Found potential foreign key in schema - table: $table, column: $column, type: $type"
-  SCHEMA_COLUMNS["$table:$column"]=1
-  COLUMN_TYPES["$table:$column"]="$type"
+    if [ "$type" = "references" ] || [ "$type" = "belongs_to" ]; then
+      column="${column}_id"
+    fi
+
+    if [[ "$column" == *_id ]]; then
+      debug "Found potential foreign key in schema - table: $table, column: $column, type: $type"
+      SCHEMA_COLUMNS["$table:$column"]="$type"
+      COLUMN_TYPES["$table:$column"]="$type"
+    else
+      debug "Skipping non-foreign key column - table: $table, column: $column, type: $type"
+    fi
+  fi
 }
 
 parse_index() {
   local line="$1"
   local table columns
 
-  table=$(echo "$line" | sed -n 's/.*add_index[[:space:]]*"\([^"]*\)".*$/\1/p')
-  if [[ "$line" =~ \[|\, ]]; then
-    columns=$(echo "$line" | sed -n 's/.*\[\([^]]*\)\].*$/\1/p')
+  if [[ $line =~ add_index ]]; then
+    table=$(echo "$line" | sed -n 's/.*add_index[[:space:]]*"\([^"]*\)".*$/\1/p')
   else
-    columns=$(echo "$line" | sed -n 's/.*"[^"]*",[[:space:]]*"\([^"]*\)".*$/\1/p')
+    table="$current_table"
   fi
+
+  if echo "$line" | grep -q '\['; then
+    columns=$(echo "$line" | sed -n 's/.*\[\([^]]*\)\].*$/\1/p' | tr -d '":')
+  else
+    columns=$(echo "$line" | sed -n 's/.*[[:space:]]"\([^"]*\)".*$/\1/p')
+  fi
+
+  columns=$(echo "$columns" | tr -d ' ' | tr ',' ' ')
 
   if [ -n "$table" ] && [ -n "$columns" ]; then
     EXISTING_INDEXES["$table:$columns"]=1
+    # Store each column separately for faster lookup
+    for column in $columns; do
+      TABLE_INDEXES["$table:$column"]=1
+    done
     debug "Recorded existing index - table: $table, columns: $columns"
+  else
+    debug "Failed to parse index from line: $line"
   fi
 }
 
-parse_schema
+# New optimized index_exists function
+index_exists() {
+  local table="$1"
+  local column="$2"
 
-debug "Schema columns that need indexes:"
-for key in "${!SCHEMA_COLUMNS[@]}"; do
-  debug "  $key (type: ${COLUMN_TYPES[$key]})"
-done
-
-# Check only the columns changed in migrations
-missing_indexes=false
-for key in "${!MIGRATION_COLUMNS[@]}"; do
-  IFS=':' read -r table column <<< "$key"
-  column_type=${MIGRATION_COLUMNS[$key]}
-  type_description=$(get_column_type_description "$column_type")
-
-  debug "Checking index requirement from migration - table: $table, column: $column, type: $column_type"
-  if ! index_exists "$table" "$column"; then
-    echo "::error file=$file::Missing index for foreign key column '$column' in table '$table'"
-    echo "Details:"
-    echo "- Column type: $column_type ($type_description)"
-    echo "- Column appears to be a foreign key (ends with _id)"
-    echo "- Please add an index to improve query performance"
-    echo "- You can add it using: add_index :$table, :$column"
-    missing_indexes=true
+  if [[ -v "TABLE_INDEXES[$table:$column]" ]]; then
+    debug "Found existing index for $table:$column"
+    return 0
   fi
-done
+  debug "No existing index found for $table:$column"
+  return 1
+}
 
-if [ "$missing_indexes" = true ]; then
-  echo "Found foreign key columns in schema.rb that need indexes"
-  echo "Foreign keys should have indexes to improve JOIN performance"
-  echo "Run with DEBUG=1 to see more details about the detected columns"
-  exit 1
+# New main function for checking indexes
+main_check_indexes() {
+  initialize_globals
+
+  if should_skip; then
+    exit 0
+  fi
+
+  if ! check_changed_migrations; then
+    exit 0
+  fi
+
+  # Read current schema.rb to build table structure
+  SCHEMA_FILE="db/schema.rb"
+
+  if [ ! -f "$SCHEMA_FILE" ]; then
+    echo "Error: schema.rb not found at $SCHEMA_FILE"
+    exit 1
+  fi
+
+  debug "Reading schema.rb..."
+
+  parse_schema
+
+  debug "Schema columns that need indexes:"
+  for key in "${!SCHEMA_COLUMNS[@]}"; do
+    debug "  $key (type: ${COLUMN_TYPES[$key]})"
+  done
+
+  # Check only the columns changed in migrations
+  missing_indexes=false
+  for key in "${!MIGRATION_COLUMNS[@]}"; do
+    IFS=':' read -r table column <<< "$key"
+    column_type=${MIGRATION_COLUMNS[$key]}
+    type_description=$(get_column_type_description "$column_type")
+
+    debug "Checking index requirement from migration - table: $table, column: $column, type: $column_type"
+    if ! index_exists "$table" "$column"; then
+      echo "::error file=$file::Missing index for foreign key column '$column' in table '$table'"
+      echo "Details:"
+      echo "- Column type: $column_type ($type_description)"
+      echo "- Column appears to be a foreign key (ends with _id)"
+      echo "- Please add an index to improve query performance"
+      echo "- You can add it using: add_index :$table, :$column"
+      missing_indexes=true
+    fi
+  done
+
+  if [ "$missing_indexes" = true ]; then
+    echo "Found foreign key columns in schema.rb that need indexes"
+    echo "Foreign keys should have indexes to improve JOIN performance"
+    echo "Run with DEBUG=1 to see more details about the detected columns"
+    exit 1
+  fi
+}
+
+# Only run main_check_indexes if this script is being run directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main_check_indexes
 fi
