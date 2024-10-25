@@ -34,6 +34,7 @@ missing_indexes=false
 indexed_count=0
 missing_count=0
 total_count=0
+declare -a missing_index_commands
 
 echo "Schema Analysis Report"
 echo "====================="
@@ -50,12 +51,19 @@ for key in "${!SCHEMA_COLUMNS[@]}"; do
   if ! index_exists "$table" "$column"; then
     missing_count=$((missing_count + 1))
     echo -e "${RED}✗ Table '$table' has no index on '$column' (type: $type)${NC}"
-    echo "  - Add with: add_index :$table, :$column"
+    missing_index_commands+=("add_index :$table, :$column")
     missing_indexes=true
   else
     indexed_count=$((indexed_count + 1))
   fi
 done
+
+if [ "$missing_indexes" = true ]; then
+  echo
+  echo "Add missing indexes with:"
+  echo
+  printf '%s\n' "${missing_index_commands[@]}"
+fi
 
 echo
 echo "Summary:"
