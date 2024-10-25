@@ -34,7 +34,12 @@ missing_indexes=false
 indexed_count=0
 missing_count=0
 total_count=0
-declare -a missing_index_commands
+declare -A missing_index_reports
+declare -A missing_index_commands
+
+# Sort the keys of SCHEMA_COLUMNS
+IFS=$'\n' sorted_keys=($(sort <<<"${!SCHEMA_COLUMNS[*]}"))
+unset IFS
 
 echo "Schema Analysis Report"
 echo "====================="
@@ -43,18 +48,31 @@ echo
 echo "Missing Indexes:"
 echo "---------------"
 
-for key in "${!SCHEMA_COLUMNS[@]}"; do
+for key in "${sorted_keys[@]}"; do
   IFS=':' read -r table column <<< "$key"
   type="${COLUMN_TYPES[$key]}"
   total_count=$((total_count + 1))
 
   if ! index_exists "$table" "$column"; then
     missing_count=$((missing_count + 1))
-    echo -e "${RED}✗ Table '$table' has no index on '$column' (type: $type)${NC}"
-    missing_index_commands+=("add_index :$table, :$column")
+    if [[ "$type" == "polymorphic" ]]; then
+      base_column="${column%_id}"
+      missing_index_reports["$key"]="${RED}✗ Table '$table' has no index on polymorphic association '${base_column}' (columns: ${base_column}_type, ${base_column}_id)${NC}"
+      missing_index_commands["$key"]="add_index :$table, [:${base_column}_type, :${base_column}_id]"
+    else
+      missing_index_reports["$key"]="${RED}✗ Table '$table' has no index on '$column' (type: $type)${NC}"
+      missing_index_commands["$key"]="add_index :$table, :$column"
+    fi
     missing_indexes=true
   else
     indexed_count=$((indexed_count + 1))
+  fi
+done
+
+# Print sorted missing index reports
+for key in "${sorted_keys[@]}"; do
+  if [[ -v "missing_index_reports[$key]" ]]; then
+    echo -e "${missing_index_reports[$key]}"
   fi
 done
 
@@ -62,7 +80,13 @@ if [ "$missing_indexes" = true ]; then
   echo
   echo "Add missing indexes with:"
   echo
-  printf '%s\n' "${missing_index_commands[@]}"
+
+  # Print sorted missing index commands
+  for key in "${sorted_keys[@]}"; do
+    if [[ -v "missing_index_commands[$key]" ]]; then
+      echo "${missing_index_commands[$key]}"
+    fi
+  done
 fi
 
 echo
