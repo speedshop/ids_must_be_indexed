@@ -93,6 +93,9 @@ class CreateOrders < ActiveRecord::Migration[7.0]
 end
 
 # Multi-column index
+# We pass if the column appears in the index anywhere, because this is highly
+# dependent on your query pattern. In this example, if you ever join users to
+# departments only, you should add an additional index.
 class AddDepartmentToUsers < ActiveRecord::Migration[7.0]
   def change
     add_column :users, :department_id, :bigint
