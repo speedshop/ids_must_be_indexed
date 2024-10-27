@@ -2,6 +2,14 @@
 
 set -euo pipefail
 
+# shellcheck disable=SC2034
+if ! declare -g TEST_VAR 2>/dev/null; then
+  echo "Error: This script requires Bash version 4.2 or later."
+  echo "Your current Bash version is: ${BASH_VERSION}"
+  echo "Please upgrade your Bash version to run this script."
+  exit 1
+fi
+
 DEBUG=${DEBUG:-0}
 
 debug() {
@@ -126,15 +134,6 @@ parse_migration() {
 }
 # New function to initialize global variables
 initialize_globals() {
-  # shellcheck disable=SC2034
-  if ! declare -g TEST_VAR 2>/dev/null; then
-    echo "Error: This script requires Bash version 4.2 or later for declare -g support."
-    echo "Your current Bash version is: ${BASH_VERSION}"
-    echo "Please upgrade your Bash version to run this script."
-    exit 1
-  fi
-
-
   declare -g -A MIGRATION_COLUMNS
   declare -g -A SCHEMA_COLUMNS
   declare -g -A COLUMN_TYPES
