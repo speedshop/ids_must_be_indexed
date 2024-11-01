@@ -202,6 +202,29 @@ end'
   [[ "$output" =~ "Missing index for foreign key column 'post_id' in table 'comments'" ]]
 }
 
+@test "handles parentheses methods in migration" {
+  create_schema '
+  create_table "comments", force: :cascade do |t|
+    t.integer "post_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_create_comments.rb" '
+class CreateComments < ActiveRecord::Migration[7.2]
+  def change
+    create_table(:comments) do |t|
+      t.integer(:post_id)
+      t.timestamps
+    end
+  end
+end'
+
+  run ./check_indexes.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Missing index for foreign key column 'post_id' in table 'comments'" ]]
+}
+
 @test "debug output works when enabled" {
   create_schema '
   create_table "users", force: :cascade do |t|

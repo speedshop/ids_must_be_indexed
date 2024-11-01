@@ -107,7 +107,7 @@ parse_migration() {
   local in_create_table=false
 
   while IFS= read -r line; do
-    line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    line=$(echo "$line" | sed -e 's/[()]/ /g' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
     if echo "$line" | grep -q "create_table"; then
       current_table=$(echo "$line" | extract_table_name)
