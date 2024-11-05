@@ -10,6 +10,10 @@ inputs:
     description: 'Enable debug output'
     required: false
     default: '0'
+  schema_file:
+    description: 'Path to schema.rb'
+    required: true
+    default: './db/schema.rb'
 
 runs:
   using: 'composite'
@@ -18,4 +22,5 @@ runs:
       shell: bash
       env:
         DEBUG: ${{ inputs.debug }}
+        SCHEMA_FILE: ${{ inputs.schema_file }}
       run: ${{ github.action_path }}/check_indexes.sh
