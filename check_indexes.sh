@@ -11,6 +11,7 @@ if ! declare -g TEST_VAR 2>/dev/null; then
 fi
 
 DEBUG=${DEBUG:-0}
+SCHEMA_FILE="${SCHEMA_FILE:-db/schema.rb}"
 
 debug() {
   if [ "${DEBUG}" = "1" ]; then
@@ -316,8 +317,6 @@ main_check_indexes() {
     exit 0
   fi
 
-  # Read current schema.rb to build table structure
-  SCHEMA_FILE="db/schema.rb"
 
   if [ ! -f "$SCHEMA_FILE" ]; then
     echo "Error: schema.rb not found at $SCHEMA_FILE"
