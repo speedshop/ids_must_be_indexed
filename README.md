@@ -61,7 +61,14 @@ jobs:
 
 You may also want to **audit your existing schema.rb** for missing foreign key indexes.
 
-Look at `audit.sh` in this repository. Copy `audit.sh` and `check_indexes.sh` to your repo, `chmod +x audit.sh` and then run it. You'll get a list of columns which look like foreign keys and are unindexed.
+Look at `audit.sh` in this repository. Copy `audit.sh` and `check_indexes.sh` to your repo, `chmod +x audit.sh` and then run it. You'll get a list of columns which look like foreign keys and are unindexed. Here are the commands that do this:
+
+```bash
+wget https://raw.githubusercontent.com/speedshop/ids_must_be_indexed/refs/heads/main/audit.sh
+wget https://raw.githubusercontent.com/speedshop/ids_must_be_indexed/refs/heads/main/check_indexes.sh
+chmod +x audit.sh
+./audit.sh
+```
 
 ## Configuration
 
