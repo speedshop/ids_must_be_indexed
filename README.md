@@ -147,8 +147,15 @@ You can skip the check in three ways:
 ```bash
 git commit -m "Add user migration [skip-index-check]"
 ```
+2. Add `[skip-index-check]` to your pull request title:
+```yaml
+- name: Check Migration Indexes
+  uses: your-username/ids_must_be_indexed@v1.2.1
+  env:
+    GITHUB_PR_TITLE: ${{ github.event.pull_request.title }}
+```
 
-2. Set environment variable in your workflow:
+3. Set environment variable in your workflow:
 ```yaml
 - name: Check Migration Indexes
   uses: your-username/ids_must_be_indexed@v1.2.1
@@ -156,7 +163,7 @@ git commit -m "Add user migration [skip-index-check]"
     SKIP_INDEX_CHECK: "1"
 ```
 
-3. Set environment variable locally:
+4. Set environment variable locally:
 ```bash
 SKIP_INDEX_CHECK=1 ./check_indexes.sh
 ```
