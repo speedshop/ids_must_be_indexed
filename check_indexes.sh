@@ -57,6 +57,12 @@ should_skip() {
     fi
   fi
 
+  # Check for skip in GITHUB_PR_TITLE environment variable
+  if [ -n "${GITHUB_PR_TITLE:-}" ] && echo "${GITHUB_PR_TITLE}" | grep -q "\[skip-index-check\]"; then
+    echo "Skipping index check: [skip-index-check] found in PR title"
+    return 0
+  fi
+
   # Check for SKIP_INDEX_CHECK environment variable
   if [ "${SKIP_INDEX_CHECK:-0}" = "1" ]; then
     echo "Skipping index check: SKIP_INDEX_CHECK environment variable is set"
