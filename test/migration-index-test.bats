@@ -307,6 +307,32 @@ end'
   [[ "$output" =~ "Skipping index check" ]]
 }
 
+@test "skips check when GITHUB_PR_TITLE contains [skip-index-check]" {
+  # Create schema without index
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.bigint "company_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_create_users.rb" '
+class CreateUsers < ActiveRecord::Migration[7.2]
+  def change
+    create_table :users do |t|
+      t.bigint :company_id
+      t.timestamps
+    end
+  end
+end'
+
+  # Set GITHUB_PR_TITLE to a value containing [skip-index-check]
+  GITHUB_PR_TITLE="[skip-index-check] Update users table schema" run ./check_indexes.sh
+  echo "output: $output"
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "Skipping index check" ]]
+}
+
 @test "handles UUID foreign keys" {
   create_schema '
   create_table "products", force: :cascade do |t|
