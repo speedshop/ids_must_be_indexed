@@ -14,7 +14,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Read schema.rb
-SCHEMA_FILE="db/schema.rb"
+SCHEMA_FILE="${SCHEMA_FILE:-db/schema.rb}"
 
 if [ ! -f "$SCHEMA_FILE" ]; then
   echo "Error: schema.rb not found at $SCHEMA_FILE"
