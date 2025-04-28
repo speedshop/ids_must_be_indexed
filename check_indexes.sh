@@ -131,7 +131,7 @@ parse_migration() {
     elif echo "$line" | grep -qE "add_column|change_column"; then
       local table column type
       read -r _ table column type <<< "$(echo "$line" | awk '{print $1, $2, $3, $4}' | tr -d ':,"')"
-      if is_foreign_key_column "$column"; then
+      if is_foreign_key_column "$column" && [ "$type" != "string" ]; then
         debug "Found column change - table: $table, column: $column, type: $type"
         MIGRATION_COLUMNS["$table:$column"]="$type"
       fi
@@ -347,8 +347,16 @@ main_check_indexes() {
     type_description=$(get_column_type_description "$column_type")
 
     debug "Checking index requirement from migration - table: $table, column: $column, type: $column_type"
+
+    # Skip string columns ending with _id
+    if [ "$column_type" = "string" ]; then
+      debug "Skipping string column $column in table $table"
+      continue
+    fi
+
     if ! index_exists "$table" "$column"; then
-      if [[ "${COLUMN_TYPES[$table:$column]}" == "polymorphic" ]]; then
+      # Check if the key exists in COLUMN_TYPES before accessing it
+      if [[ -v "COLUMN_TYPES[$table:$column]" ]] && [[ "${COLUMN_TYPES[$table:$column]}" == "polymorphic" ]]; then
         local base_column="${column%_id}"
         echo "::error file=$file::Missing index for polymorphic association '${base_column}' in table '$table'"
         echo "Details:"
