@@ -570,3 +570,23 @@ end'
   [[ "$output" =~ "Missing index for foreign key column 'invited_by_user_id' in table 'invitations'" ]]
   [[ "$output" =~ "add_index :invitations, :invited_by_user_id" ]]
 }
+
+@test "passes when a new _id field of string type is added" {
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_add_contact_id_to_users.rb" '
+class AddNameToUsers < ActiveRecord::Migration[7.2]
+  def change
+    add_column :users, :contact_id, :string
+  end
+end'
+
+  run ./check_indexes.sh
+  echo "Test output:"
+  echo "$output"
+  [ "$status" -eq 0 ]
+}
