@@ -141,6 +141,10 @@ class ChangeCommentIdType < ActiveRecord::Migration[7.0]
 end
 ```
 
+## Notes
+
+- String-typed `_id` columns are ignored. Only `_id` columns with types `integer`, `bigint`, `uuid`, or those created via `references`/`belongs_to` are considered for index checks.
+
 ## Skipping
 
 There are times when you might want to skip the index check, such as:

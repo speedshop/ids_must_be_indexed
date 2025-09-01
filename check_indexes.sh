@@ -348,24 +348,18 @@ main_check_indexes() {
 
     debug "Checking index requirement from migration - table: $table, column: $column, type: $column_type"
 
-    # Skip string columns ending with _id
-    if [ "$column_type" = "string" ]; then
-      debug "Skipping string column $column in table $table"
-      continue
-    fi
-
     if ! index_exists "$table" "$column"; then
       # Check if the key exists in COLUMN_TYPES before accessing it
       if [[ -v "COLUMN_TYPES[$table:$column]" ]] && [[ "${COLUMN_TYPES[$table:$column]}" == "polymorphic" ]]; then
         local base_column="${column%_id}"
-        echo "::error file=$file::Missing index for polymorphic association '${base_column}' in table '$table'"
+        echo "::error file=$SCHEMA_FILE::Missing index for polymorphic association '${base_column}' in table '$table'"
         echo "Details:"
         echo "- Association type: Polymorphic"
         echo "- Columns: ${base_column}_type, ${base_column}_id"
         echo "- Please add a composite index to improve query performance"
         echo "- You can add it using: add_index :$table, [:${base_column}_type, :${base_column}_id]"
       else
-        echo "::error file=$file::Missing index for foreign key column '$column' in table '$table'"
+        echo "::error file=$SCHEMA_FILE::Missing index for foreign key column '$column' in table '$table'"
         echo "Details:"
         echo "- Column type: $column_type ($type_description)"
         echo "- Column appears to be a foreign key (ends with _id)"
