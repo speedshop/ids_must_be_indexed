@@ -521,3 +521,75 @@ end'
   [[ "$output" =~ "Missing index for foreign key column 'invited_by_user_id' in table 'invitations'" ]]
   [[ "$output" =~ "add_index :invitations, :invited_by_user_id" ]]
 }
+
+@test "works with custom schema file path" {
+  mkdir -p custom/path
+  cat > custom/path/schema.rb << EOF
+ActiveRecord::Schema[7.2].define(version: 2024_01_01_000000) do
+  create_table "users", force: :cascade do |t|
+    t.bigint "company_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+end
+EOF
+
+  create_migration "20240101000000_create_users.rb" '
+class CreateUsers < ActiveRecord::Migration[7.2]
+  def change
+    create_table :users do |t|
+      t.bigint :company_id
+      t.timestamps
+    end
+  end
+end'
+
+  run env SCHEMA_FILE="custom/path/schema.rb" ./check_indexes.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Missing index for foreign key column 'company_id' in table 'users'" ]]
+}
+
+@test "fails gracefully when custom schema file does not exist" {
+  create_migration "20240101000000_create_users.rb" '
+class CreateUsers < ActiveRecord::Migration[7.2]
+  def change
+    create_table :users do |t|
+      t.bigint :company_id
+      t.timestamps
+    end
+  end
+end'
+
+  run env SCHEMA_FILE="nonexistent/schema.rb" ./check_indexes.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Error: schema.rb not found at nonexistent/schema.rb" ]]
+}
+
+@test "passes with custom schema file and proper indexes" {
+  mkdir -p app/db
+  cat > app/db/schema.rb << EOF
+ActiveRecord::Schema[7.2].define(version: 2024_01_01_000000) do
+  create_table "users", force: :cascade do |t|
+    t.bigint "company_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  add_index "users", ["company_id"], name: "index_users_on_company_id"
+end
+EOF
+
+  create_migration "20240101000000_create_users.rb" '
+class CreateUsers < ActiveRecord::Migration[7.2]
+  def change
+    create_table :users do |t|
+      t.bigint :company_id
+      t.timestamps
+    end
+    add_index :users, :company_id
+  end
+end'
+
+  run env SCHEMA_FILE="app/db/schema.rb" ./check_indexes.sh
+  [ "$status" -eq 0 ]
+}
