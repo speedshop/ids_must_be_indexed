@@ -132,7 +132,7 @@ parse_migration() {
     elif echo "$line" | grep -qE "add_column|change_column"; then
       local table column type
       read -r _ table column type <<< "$(echo "$line" | awk '{print $1, $2, $3, $4}' | tr -d ':,"')"
-      if is_foreign_key_column "$column"; then
+      if is_foreign_key_column "$column" && [ "$type" != "string" ]; then
         debug "Found column change - table: $table, column: $column, type: $type"
         MIGRATION_COLUMNS["$table:$column"]="$type"
       fi
@@ -346,7 +346,27 @@ main_check_indexes() {
     type_description=$(get_column_type_description "$column_type")
 
     debug "Checking index requirement from migration - table: $table, column: $column, type: $column_type"
+
+    # Skip string columns ending with _id
+    if [ "$column_type" = "string" ]; then
+      debug "Skipping string column $column in table $table"
+      continue
+    fi
+
     if ! index_exists "$table" "$column"; then
+      # Check if the column exists in the schema
+      if [[ ! -v "COLUMN_TYPES[$table:$column]" ]]; then
+        echo "::error file=$file::Column '$column' in table '$table' found in migration but not in schema"
+        echo "Details:"
+        echo "- The column '$column' was found in a migration file"
+        echo "- However, this column does not exist in your schema.rb file"
+        echo "- This usually means you need to run 'rails db:migrate' to update your schema"
+        echo "- After updating the schema, run this check again"
+        missing_indexes=true
+        continue
+      fi
+
+      # Check if the key exists in COLUMN_TYPES before accessing it
       if [[ "${COLUMN_TYPES[$table:$column]}" == "polymorphic" ]]; then
         local base_column="${column%_id}"
         echo "::error file=$file::Missing index for polymorphic association '${base_column}' in table '$table'"

@@ -10,6 +10,7 @@ setup() {
   git init
   git config --local user.email "test@example.com"
   git config --local user.name "Test User"
+  git config --local commit.gpgsign false
   git checkout -b main
 
   # Create base branch
@@ -641,4 +642,46 @@ end'
 
   run env SCHEMA_FILE="app/db/schema.rb" ./check_indexes.sh
   [ "$status" -eq 0 ]
+}
+
+@test "passes when a new _id field of string type is added" {
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_add_contact_id_to_users.rb" '
+class AddNameToUsers < ActiveRecord::Migration[7.2]
+  def change
+    add_column :users, :contact_id, :string
+  end
+end'
+
+  run ./check_indexes.sh
+  echo "Test output:"
+  echo "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "fails with explicit error when column in migration is not in schema" {
+  create_schema '
+  create_table "users", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_add_company_id_to_users.rb" '
+class AddCompanyIdToUsers < ActiveRecord::Migration[7.2]
+  def change
+    add_column :users, :company_id, :bigint
+  end
+end'
+
+  run ./check_indexes.sh
+  echo "Test output:"
+  echo "$output"
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "Column 'company_id' in table 'users' found in migration but not in schema" ]]
+  [[ "$output" =~ "rails db:migrate" ]]
 }
