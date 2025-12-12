@@ -2,9 +2,11 @@
   <img src="https://imgur.com/G6Tgzou.png" />
 </p>
 
-# "_ID Must Be Indexed": A Rails Foreign Key Index Check
+# IDs Must Be Indexed
 
-A GitHub Action to ensure all Rails application foreign key columns (any column ending in `_id` and an `integer`, `bigint` or `uuid`) have corresponding database indexes.
+**A GitHub Action that checks your Rails migrations for missing database indexes.**
+
+When you add a column like `user_id` to a table, you almost always need an index on it. Without an index, your database queries will be slow. This action stops pull requests that forget to add indexes.
 
 ```
 Error: Missing index for foreign key column 'comment_id' in table 'albums'
@@ -15,28 +17,28 @@ Details:
 - You can add it using: add_index :albums, :comment_id
 ```
 
-## Problem
+## Why Use This?
 
-If you forget to use `references` when adding a foreign key column, you'll usually also forget to add the index.
+When you add a foreign key column in Rails, you should also add an index. But it's easy to forget. If you use `add_column` instead of `references`, Rails won't add the index for you.
 
-Missing indexes on foreign keys is a massive tax on the performance of your application, as things like JOINs and `preload` calls will be much slower.
+Missing indexes hurt your app's speed. JOINs and `preload` calls become much slower. Most columns that end in `_id` will be used in queries. This action checks every pull request and fails if an index is missing.
 
-99% of the time when a column ends in _id, you're eventually going to JOIN or query based on that column. Rather than leave it up to the developer to _hopefully_ remember to always do this, this action is a [poka-yoke](https://en.wikipedia.org/wiki/Poka-yoke) which creates a strong default.
+This pattern is called a [poka-yoke](https://en.wikipedia.org/wiki/Poka-yoke)—a check that prevents mistakes before they happen.
 
 ## Features
 
-- **Fails your pull request** if you are missing indexes on foreign key columns
-- **Install in 10 seconds**, without any dependencies or configuration. Since it only runs on columns changed in each PR, you can add this to any project without spending a half hour adding ignored columns.
-- Catches foreign keys created or **modified across multiple migrations**
-- Supports various column types (**bigint, integer,** uuid or references), polymorphic associations and composite indexes
+- **Blocks pull requests** that are missing indexes on foreign key columns
+- **Quick setup**—no config needed. Only checks columns changed in each PR, so you can add it to any project right away.
+- **Catches changes across migrations**—if you create a column in one migration and change its type in another, both are checked
+- **Works with all column types**: bigint, integer, uuid, references, polymorphic, and composite indexes
 
 ## Requirements
 
-- Must be using **schema.rb**, structure.sql is not supported.
+- Your app must use **schema.rb**. This action does not support structure.sql.
 
-## Usage
+## Installation
 
-Add this to a GitHub workflow (e.g. `.github/workflows/check-indexes.yml`):
+Add this file to your repo at `.github/workflows/check-indexes.yml`:
 
 ```yaml
 name: Check Indexes
@@ -57,11 +59,11 @@ jobs:
         uses: speedshop/ids_must_be_indexed@v1.2.1
 ```
 
-## Auditing Existing Schema
+That's it. The action runs on every pull request that changes migration files.
 
-You may also want to **audit your existing schema.rb** for missing foreign key indexes.
+## Audit Your Existing Schema
 
-Look at `audit.sh` in this repository. Copy `audit.sh` and `check_indexes.sh` to your repo, `chmod +x audit.sh` and then run it. You'll get a list of columns which look like foreign keys and are unindexed. Here are the commands that do this:
+Want to find missing indexes in your current schema? Run these commands:
 
 ```bash
 wget https://raw.githubusercontent.com/speedshop/ids_must_be_indexed/refs/heads/main/audit.sh
@@ -70,26 +72,30 @@ chmod +x audit.sh
 ./audit.sh
 ```
 
+This prints a list of columns that look like foreign keys but don't have indexes.
+
 ## Configuration
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| debug | Enable debug output | No | '0' |
+| debug | Show debug output | No | '0' |
 
-## Common Scenarios
+## Examples
 
-### ✅ Will Pass
+### Will Pass
 
 ```ruby
-# Single migration with index
+# Column with index
 class AddCompanyToUsers < ActiveRecord::Migration[7.0]
   def change
     add_column :users, :company_id, :bigint
     add_index :users, :company_id
   end
 end
+```
 
-# References with index
+```ruby
+# Using references (adds index by default)
 class CreateOrders < ActiveRecord::Migration[7.0]
   def change
     create_table :orders do |t|
@@ -98,11 +104,10 @@ class CreateOrders < ActiveRecord::Migration[7.0]
     end
   end
 end
+```
 
-# Multi-column index
-# We pass if the column appears in the index anywhere, because this is highly
-# dependent on your query pattern. In this example, if you ever join users to
-# departments only, you should add an additional index.
+```ruby
+# Composite index—passes if the column appears anywhere in an index
 class AddDepartmentToUsers < ActiveRecord::Migration[7.0]
   def change
     add_column :users, :department_id, :bigint
@@ -111,20 +116,23 @@ class AddDepartmentToUsers < ActiveRecord::Migration[7.0]
 end
 ```
 
-### ❌ Will Fail
+> [!NOTE]
+> If you use a composite index like `[:company_id, :department_id]`, queries on `department_id` alone may still be slow. Add a separate index if you query by `department_id` without `company_id`.
+
+### Will Fail
 
 ```ruby
 # Missing index
 class AddCompanyToUsers < ActiveRecord::Migration[7.0]
   def change
     add_column :users, :company_id, :bigint
-    # Missing index!
+    # No index!
   end
 end
 ```
 
 ```ruby
-# Foreign key created across migrations
+# Column type changed to a foreign key type without adding an index
 class CreateAlbums < ActiveRecord::Migration[7.0]
   def change
     create_table :albums do |t|
@@ -135,68 +143,82 @@ end
 
 class ChangeCommentIdType < ActiveRecord::Migration[7.0]
   def change
-    change_column :albums, :comment_id, :bigint  # Changed to foreign key
+    change_column :albums, :comment_id, :bigint  # Now a foreign key
     # Needs an index!
   end
 end
 ```
 
-## Skipping
+## Skipping the Check
 
-There are times when you might want to skip the index check, such as:
-- Temporary migrations
-- Special cases where indexes would be inappropriate, like when disk space is limited
-- Development or testing scenarios
+Sometimes you need to skip the index check. For example:
 
-You can skip the check in three ways:
+- The column won't be used in queries
+- You have disk space limits
+- You're testing something
 
-1. Add `[skip-index-check]` to your commit message:
+There are four ways to skip:
+
+**1. Add `[skip-index-check]` to your commit message:**
+
 ```bash
 git commit -m "Add user migration [skip-index-check]"
 ```
-2. Add `[skip-index-check]` to your pull request title:
+
+**2. Add `[skip-index-check]` to your pull request title:**
+
 ```yaml
 - name: Check Migration Indexes
-  uses: your-username/ids_must_be_indexed@v1.2.1
+  uses: speedshop/ids_must_be_indexed@v1.2.1
   env:
     GITHUB_PR_TITLE: ${{ github.event.pull_request.title }}
 ```
 
-3. Set environment variable in your workflow:
+**3. Set an environment variable in your workflow:**
+
 ```yaml
 - name: Check Migration Indexes
-  uses: your-username/ids_must_be_indexed@v1.2.1
+  uses: speedshop/ids_must_be_indexed@v1.2.1
   env:
     SKIP_INDEX_CHECK: "1"
 ```
 
-4. Set environment variable locally:
+**4. Set an environment variable locally:**
+
 ```bash
 SKIP_INDEX_CHECK=1 ./check_indexes.sh
 ```
 
-⚠️ **Note**: Use skip options sparingly. Missing indexes can cause significant performance issues in production. Always document why you're skipping the check in your commit message or pull request description.
+> [!WARNING]
+> Use skip options only when you have a good reason. Missing indexes cause slow queries in production. Always explain why you skipped the check in your commit message or PR description.
 
-## Development
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ### Running Tests
 
 ```bash
 # Install BATS
-brew install bats-core  # or apt-get install bats
+brew install bats-core  # or: apt-get install bats
 
 # Run tests
 bats test/migration-index-test.bats
 ```
 
-## Contributing
+## Project Structure
 
-Contributions are welcome! Please check out our [Contributing Guide](CONTRIBUTING.md).
+| File | Purpose |
+|------|---------|
+| `action.yml` | GitHub Action definition |
+| `check_indexes.sh` | Main script that checks migrations |
+| `audit.sh` | Script to check your existing schema |
+| `test/` | BATS test files |
 
 ## Acknowledgments
 
-This action was inspired by a [Danger](https://github.com/danger/danger) check at [Gusto](https://github.com/gusto), written by the incredible [Toni Rib](https://github.com/tonirib).
+This action was inspired by a [Danger](https://github.com/danger/danger) check at [Gusto](https://github.com/gusto), written by [Toni Rib](https://github.com/tonirib).
 
-The original development of this action was sponsored by [Easol](https://github.com/easolhq).
+Development was sponsored by [Easol](https://github.com/easolhq).
 
-The original development of this action was heavily assisted by Claude 3.5 Sonnet. I'm a Ruby guy, not a bash guy.
+The original code was written with help from Claude 3.5 Sonnet.
