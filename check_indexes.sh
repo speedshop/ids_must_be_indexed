@@ -112,9 +112,36 @@ parse_migration() {
 
   local current_table=""
   local in_create_table=false
+  local current_section="unknown" # up, down, change, unknown
 
   while IFS= read -r line; do
     line=$(echo "$line" | sed -e 's/[()]/ /g' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+    if echo "$line" | grep -qE "^def[[:space:]]+up\\b"; then
+      current_section="up"
+      debug "Entering up section"
+      continue
+    elif echo "$line" | grep -qE "^def[[:space:]]+down\\b"; then
+      current_section="down"
+      debug "Entering down section"
+      continue
+    elif echo "$line" | grep -qE "^def[[:space:]]+change\\b"; then
+      current_section="change"
+      debug "Entering change section"
+      continue
+    fi
+
+    # Close out method sections. Avoid interfering with create_table block ends.
+    if [ "$in_create_table" = false ] && [ "$current_section" != "unknown" ] && [[ "$line" == "end" ]]; then
+      debug "Leaving $current_section section"
+      current_section="unknown"
+      continue
+    fi
+
+    # Ignore any migration operations defined only in down; schema.rb reflects up/change.
+    if [ "$current_section" = "down" ]; then
+      continue
+    fi
 
     if echo "$line" | grep -q "create_table"; then
       current_table=$(echo "$line" | extract_table_name)

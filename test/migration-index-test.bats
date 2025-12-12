@@ -685,3 +685,31 @@ end'
   [[ "$output" =~ "Column 'company_id' in table 'users' found in migration but not in schema" ]]
   [[ "$output" =~ "rails db:migrate" ]]
 }
+
+@test "ignores columns defined only in down when up drops table" {
+  create_schema '
+  create_table "projects", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end'
+
+  create_migration "20240101000000_drop_users.rb" '
+class DropUsers < ActiveRecord::Migration[7.2]
+  def up
+    drop_table :users
+  end
+
+  def down
+    create_table :users do |t|
+      t.bigint :company_id
+      t.timestamps
+    end
+    add_index :users, :company_id
+  end
+end'
+
+  run ./check_indexes.sh
+  echo "Test output:"
+  echo "$output"
+  [ "$status" -eq 0 ]
+}
