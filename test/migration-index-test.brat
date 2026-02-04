@@ -1,4 +1,5 @@
 #!/bin/sh
+. "$DIR/../test.sh"
 
 @test "passes when bigint has index" {
   test_prepare
