@@ -3,14 +3,15 @@
 We welcome contributions! Here's what you need to know:
 
 1. Create a new branch for your work.
-2. Ensure all tests pass: `bats test/migration-index-test.bats`.
-3. Run `shellcheck` on all shell scripts.
-4. Update documentation if necessary.
+2. Initialize submodules: `git submodule update --init --recursive`.
+3. Ensure all tests pass: `PATH="$PWD:$PATH" ./vendor/brat/bin/brat test/*.brat`.
+4. Run `shellcheck` on all shell scripts.
+5. Update documentation if necessary.
 
 ## Prerequisites
 
 ```
-brew install bats shellcheck
+brew install shellcheck
 ```
 
 ## Guidelines

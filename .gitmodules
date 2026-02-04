@@ -1,0 +1,3 @@
+[submodule "vendor/brat"]
+	path = vendor/brat
+	url = https://codeberg.org/sstephenson/brat.git
