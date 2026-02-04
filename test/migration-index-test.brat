@@ -1,57 +1,8 @@
-#!/usr/bin/env bats
-
-setup() {
-  # Create temporary directory for each test
-  export TEMP_DIR="$(mktemp -d)"
-  export GITHUB_WORKSPACE="$TEMP_DIR"
-  cd "$TEMP_DIR"
-
-  # Set up git repo
-  git init
-  git config --local user.email "test@example.com"
-  git config --local user.name "Test User"
-  git config --local commit.gpgsign false
-  git checkout -b main
-
-  # Create base branch
-  git checkout -b base
-  mkdir -p db
-  touch db/schema.rb
-  git add .
-  git commit -m "Initial commit"
-
-  # Create feature branch
-  git checkout -b feature
-
-  # Copy the script to test directory
-  cp "$BATS_TEST_DIRNAME"/../check_indexes.sh .
-  chmod +x check_indexes.sh
-}
-
-teardown() {
-  rm -rf "$TEMP_DIR"
-}
-
-# Helper to create schema.rb content
-create_schema() {
-  cat > db/schema.rb << EOF
-ActiveRecord::Schema[7.2].define(version: 2024_01_01_000000) do
-  $1
-end
-EOF
-}
-
-# Helper to create migration file
-create_migration() {
-  local filename="$1"
-  local content="$2"
-  mkdir -p db/migrate
-  cat > "db/migrate/$filename" << EOF
-$content
-EOF
-}
+#!/bin/sh
 
 @test "passes when bigint has index" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -73,10 +24,12 @@ class CreateUsers < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 0 ]
+  assert_status 0
 }
 
 @test "fails when bigint has no index" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -95,11 +48,13 @@ class CreateUsers < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'company_id' in table 'users'" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'company_id' in table 'users'"
 }
 
 @test "passes with composite index" {
+  test_prepare
+
   create_schema '
   create_table "orders", force: :cascade do |t|
     t.bigint "user_id"
@@ -123,10 +78,12 @@ class CreateOrders < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 0 ]
+  assert_status 0
 }
 
 @test "fails when column becomes foreign key" {
+  test_prepare
+
   create_schema '
   create_table "albums", force: :cascade do |t|
     t.bigint "comment_id"
@@ -152,11 +109,13 @@ class ChangeCommentIdType < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'comment_id' in table 'albums'" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'comment_id' in table 'albums'"
 }
 
 @test "passes with references and index" {
+  test_prepare
+
   create_schema '
   create_table "posts", force: :cascade do |t|
     t.bigint "author_id"
@@ -177,10 +136,12 @@ class CreatePosts < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 0 ]
+  assert_status 0
 }
 
 @test "handles integer foreign keys" {
+  test_prepare
+
   create_schema '
   create_table "comments", force: :cascade do |t|
     t.integer "post_id"
@@ -199,11 +160,13 @@ class CreateComments < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'post_id' in table 'comments'" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'post_id' in table 'comments'"
 }
 
 @test "handles parentheses methods in migration" {
+  test_prepare
+
   create_schema '
   create_table "comments", force: :cascade do |t|
     t.integer "post_id"
@@ -222,11 +185,13 @@ class CreateComments < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'post_id' in table 'comments'" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'post_id' in table 'comments'"
 }
 
 @test "debug output works when enabled" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -248,14 +213,14 @@ class CreateUsers < ActiveRecord::Migration[7.2]
 end'
 
   run env DEBUG=1 ./check_indexes.sh
-  echo "Test output:"
-  echo "$output"
-  [ "$status" -eq 0 ]
-  [[ "$output" =~ "Schema columns that need indexes" ]]
+  print_output
+  assert_status 0
+  match_output "Schema columns that need indexes"
 }
 
 @test "skips check when commit message contains [skip-index-check]" {
-  # Create schema without index
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -263,7 +228,6 @@ end'
     t.datetime "updated_at", null: false
   end'
 
-  # Create migration with [skip-index-check] in commit message
   create_migration "20240101000000_create_users.rb" '
 class CreateUsers < ActiveRecord::Migration[7.2]
   def change
@@ -274,17 +238,17 @@ class CreateUsers < ActiveRecord::Migration[7.2]
   end
 end'
 
-  # Amend the commit message to include skip tag
   git commit --amend -m "Add migration [skip-index-check]"
 
   run ./check_indexes.sh
-  echo "output: $output"
-  [ "$status" -eq 0 ]
-  [[ "$output" =~ "Skipping index check" ]]
+  print_output
+  assert_status 0
+  match_output "Skipping index check"
 }
 
 @test "skips check when SKIP_INDEX_CHECK environment variable is set" {
-  # Create schema without index
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -302,14 +266,15 @@ class CreateUsers < ActiveRecord::Migration[7.2]
   end
 end'
 
-  SKIP_INDEX_CHECK=1 run ./check_indexes.sh
-  echo "output: $output"
-  [ "$status" -eq 0 ]
-  [[ "$output" =~ "Skipping index check" ]]
+  run env SKIP_INDEX_CHECK=1 ./check_indexes.sh
+  print_output
+  assert_status 0
+  match_output "Skipping index check"
 }
 
 @test "skips check when GITHUB_PR_TITLE contains [skip-index-check]" {
-  # Create schema without index
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -327,14 +292,15 @@ class CreateUsers < ActiveRecord::Migration[7.2]
   end
 end'
 
-  # Set GITHUB_PR_TITLE to a value containing [skip-index-check]
-  GITHUB_PR_TITLE="[skip-index-check] Update users table schema" run ./check_indexes.sh
-  echo "output: $output"
-  [ "$status" -eq 0 ]
-  [[ "$output" =~ "Skipping index check" ]]
+  run env GITHUB_PR_TITLE="[skip-index-check] Update users table schema" ./check_indexes.sh
+  print_output
+  assert_status 0
+  match_output "Skipping index check"
 }
 
 @test "handles UUID foreign keys" {
+  test_prepare
+
   create_schema '
   create_table "products", force: :cascade do |t|
     t.uuid "category_id"
@@ -353,12 +319,14 @@ class CreateProducts < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'category_id' in table 'products'" ]]
-  [[ "$output" =~ "Column type: uuid (Universally Unique Identifier)" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'category_id' in table 'products'"
+  match_output "Column type: uuid (Universally Unique Identifier)"
 }
 
 @test "passes when UUID has index" {
+  test_prepare
+
   create_schema '
   create_table "products", force: :cascade do |t|
     t.uuid "category_id"
@@ -380,10 +348,12 @@ class CreateProducts < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 0 ]
+  assert_status 0
 }
 
 @test "passes when new column with index is added" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -401,12 +371,14 @@ class AddCompanyIdToUsers < ActiveRecord::Migration[7.2]
   end
 end'
 
-    run env DEBUG=1 ./check_indexes.sh
-  echo "output: $output"
-  [ "$status" -eq 0 ]
+  run env DEBUG=1 ./check_indexes.sh
+  print_output
+  assert_status 0
 }
 
 @test "fails when new column without index is added" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -422,11 +394,13 @@ class AddCompanyIdToUsers < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'company_id' in table 'users'" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'company_id' in table 'users'"
 }
 
 @test "passes when existing column without index is not changed" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.bigint "company_id"
@@ -441,13 +415,14 @@ class AddNameToUsers < ActiveRecord::Migration[7.2]
   end
 end'
 
-    run env DEBUG=1 ./check_indexes.sh
-  echo "Test output:"
-  echo "$output"
-  [ "$status" -eq 0 ]
+  run env DEBUG=1 ./check_indexes.sh
+  print_output
+  assert_status 0
 }
 
 @test "fails when column type is changed to foreign key without index" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.string "company_id"
@@ -463,10 +438,12 @@ class ChangeCompanyIdToBigint < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
+  assert_status 1
 }
 
 @test "fails when polymorphic association has no index" {
+  test_prepare
+
   create_schema '
   create_table "comments", force: :cascade do |t|
     t.string "commentable_type"
@@ -488,12 +465,14 @@ class CreateComments < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for polymorphic association 'commentable' in table 'comments'" ]]
-  [[ "$output" =~ "add_index :comments, [:commentable_type, :commentable_id]" ]]
+  assert_status 1
+  match_output "Missing index for polymorphic association 'commentable' in table 'comments'"
+  match_output "add_index :comments, [:commentable_type, :commentable_id]"
 }
 
 @test "passes when polymorphic association has correct composite index" {
+  test_prepare
+
   create_schema '
   create_table "comments", force: :cascade do |t|
     t.string "commentable_type"
@@ -518,11 +497,13 @@ class CreateComments < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 0 ]
-  [[ ! "$output" =~ "Missing index for polymorphic association 'commentable' in table 'comments'" ]]
+  assert_status 0
+  refute_output "Missing index for polymorphic association 'commentable' in table 'comments'"
 }
 
 @test "passes when column is part of a composite index" {
+  test_prepare
+
   create_schema '
   create_table "waiting_lists", force: :cascade do |t|
     t.integer "parking_id"
@@ -543,12 +524,14 @@ class CreateWaitingLists < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  echo "output: $output"
-  [ "$status" -eq 0 ]
-  [[ ! "$output" =~ "Missing index for foreign key column 'parking_id' in table 'waiting_lists'" ]]
+  print_output
+  assert_status 0
+  refute_output "Missing index for foreign key column 'parking_id' in table 'waiting_lists'"
 }
 
 @test "recommends correct index for column with comment" {
+  test_prepare
+
   create_schema '
   create_table "invitations", force: :cascade do |t|
     t.bigint "invited_by_user_id", comment: "member ID"
@@ -567,12 +550,14 @@ class CreateInvitations < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'invited_by_user_id' in table 'invitations'" ]]
-  [[ "$output" =~ "add_index :invitations, :invited_by_user_id" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'invited_by_user_id' in table 'invitations'"
+  match_output "add_index :invitations, :invited_by_user_id"
 }
 
 @test "works with custom schema file path" {
+  test_prepare
+
   mkdir -p custom/path
   cat > custom/path/schema.rb << EOF
 ActiveRecord::Schema[7.2].define(version: 2024_01_01_000000) do
@@ -595,11 +580,13 @@ class CreateUsers < ActiveRecord::Migration[7.2]
 end'
 
   run env SCHEMA_FILE="custom/path/schema.rb" ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Missing index for foreign key column 'company_id' in table 'users'" ]]
+  assert_status 1
+  match_output "Missing index for foreign key column 'company_id' in table 'users'"
 }
 
 @test "fails gracefully when custom schema file does not exist" {
+  test_prepare
+
   create_migration "20240101000000_create_users.rb" '
 class CreateUsers < ActiveRecord::Migration[7.2]
   def change
@@ -611,11 +598,13 @@ class CreateUsers < ActiveRecord::Migration[7.2]
 end'
 
   run env SCHEMA_FILE="nonexistent/schema.rb" ./check_indexes.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Error: schema.rb not found at nonexistent/schema.rb" ]]
+  assert_status 1
+  match_output "Error: schema.rb not found at nonexistent/schema.rb"
 }
 
 @test "passes with custom schema file and proper indexes" {
+  test_prepare
+
   mkdir -p app/db
   cat > app/db/schema.rb << EOF
 ActiveRecord::Schema[7.2].define(version: 2024_01_01_000000) do
@@ -641,10 +630,12 @@ class CreateUsers < ActiveRecord::Migration[7.2]
 end'
 
   run env SCHEMA_FILE="app/db/schema.rb" ./check_indexes.sh
-  [ "$status" -eq 0 ]
+  assert_status 0
 }
 
 @test "passes when a new _id field of string type is added" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
@@ -659,12 +650,13 @@ class AddNameToUsers < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  echo "Test output:"
-  echo "$output"
-  [ "$status" -eq 0 ]
+  print_output
+  assert_status 0
 }
 
 @test "fails with explicit error when column in migration is not in schema" {
+  test_prepare
+
   create_schema '
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
@@ -679,14 +671,15 @@ class AddCompanyIdToUsers < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  echo "Test output:"
-  echo "$output"
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "Column 'company_id' in table 'users' found in migration but not in schema" ]]
-  [[ "$output" =~ "rails db:migrate" ]]
+  print_output
+  assert_status 1
+  match_output "Column 'company_id' in table 'users' found in migration but not in schema"
+  match_output "rails db:migrate"
 }
 
 @test "ignores columns defined only in down when up drops table" {
+  test_prepare
+
   create_schema '
   create_table "projects", force: :cascade do |t|
     t.datetime "created_at", null: false
@@ -709,7 +702,6 @@ class DropUsers < ActiveRecord::Migration[7.2]
 end'
 
   run ./check_indexes.sh
-  echo "Test output:"
-  echo "$output"
-  [ "$status" -eq 0 ]
+  print_output
+  assert_status 0
 }

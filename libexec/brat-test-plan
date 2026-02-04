@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+. brat.sh
+
+FILE=
+
+for arg; do
+  case "$arg" in
+    "-"* ) usage ;;
+    * )
+      [ -z "$FILE" ] || usage
+      FILE="$arg"
+      ;;
+  esac
+done
+
+[ -n "$FILE" ] || usage
+
+. eval.sh
+
+count=0
+for kind in skip test todo; do
+  set -- $(brat_eval_var "$kind")
+  count=$((count + $#))
+done
+printf "%s\n" "$count"
+
+for kind in skip test todo; do
+  for line in $(brat_eval_var "$kind"); do
+    name="$(brat_eval_var "${kind}_${line}" || true)"
+    printf "%s\t%d\t%s\t%s\n" "$FILE" "$line" "$kind" "$name"
+  done
+done | sort -k2,2n

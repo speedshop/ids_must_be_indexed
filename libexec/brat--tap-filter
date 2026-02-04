@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+. brat.sh
+
+if [ -t 1 ]; then
+  export LC_ALL=C
+  exec awk \
+    -f "$BRAT_LIB/terminal.awk" \
+    -f "$BRAT_LIB/wcwidth.awk" \
+    -f "$BRAT_LIB/tap-status.awk" \
+    -f "$BRAT_LIB/tap-format.awk"
+else
+  exec cat
+fi

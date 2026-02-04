@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+. brat.sh
+
+FILE="$1"
+SCRIPT="$2"
+
+. eval.sh
+
+if [ "$SCRIPT" = "-" ]; then
+  while read -r SCRIPT; do
+    ( eval "$SCRIPT" )
+  done
+else
+  eval "$SCRIPT"
+fi

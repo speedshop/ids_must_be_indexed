@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+. brat.sh
+
+USAGE="<FILE> [<FILE> ...]"
+
+FILES=
+
+for arg; do
+  case "$arg" in
+    -* ) usage ;;
+    * )
+      FILES="$FILES"$TAB"$arg"
+      ;;
+  esac
+done
+
+[ -n "$FILES" ] || usage
+
+IFS="$TAB"
+plan="$BRAT_TMP.plan.$$"
+
+: >"$plan"
+for file in $FILES; do
+  brat-test-plan "$file" >"$plan~"
+  tail -n +2 "$plan~" >>"$plan"
+done
+
+wc -l "$plan" | awk '{print $1}'
+sort -k1,1 -k2,2n "$plan"

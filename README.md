@@ -199,11 +199,8 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 ### Running Tests
 
 ```bash
-# Install BATS
-brew install bats-core  # or: apt-get install bats
-
 # Run tests
-bats test/migration-index-test.bats
+./bin/brat test/*.brat
 ```
 
 ## Project Structure
@@ -213,7 +210,10 @@ bats test/migration-index-test.bats
 | `action.yml` | GitHub Action definition |
 | `check_indexes.sh` | Main script that checks migrations |
 | `audit.sh` | Script to check your existing schema |
-| `test/` | BATS test files |
+| `bin/brat` | Brat test runner |
+| `lib/` | Brat runtime library |
+| `libexec/` | Brat helper commands |
+| `test/` | Brat test files |
 
 ## Acknowledgments
 
