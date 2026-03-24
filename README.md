@@ -56,7 +56,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check Migration Indexes
-        uses: speedshop/ids_must_be_indexed@v1.2.1
+        uses: speedshop/ids_must_be_indexed@v1.2.3
 ```
 
 That's it. The action runs on every pull request that changes migration files.
@@ -169,7 +169,7 @@ git commit -m "Add user migration [skip-index-check]"
 
 ```yaml
 - name: Check Migration Indexes
-  uses: speedshop/ids_must_be_indexed@v1.2.1
+  uses: speedshop/ids_must_be_indexed@v1.2.3
   env:
     GITHUB_PR_TITLE: ${{ github.event.pull_request.title }}
 ```
@@ -178,7 +178,7 @@ git commit -m "Add user migration [skip-index-check]"
 
 ```yaml
 - name: Check Migration Indexes
-  uses: speedshop/ids_must_be_indexed@v1.2.1
+  uses: speedshop/ids_must_be_indexed@v1.2.3
   env:
     SKIP_INDEX_CHECK: "1"
 ```
